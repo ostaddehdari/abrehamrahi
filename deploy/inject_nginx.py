@@ -8,6 +8,21 @@ import time
 from pathlib import Path
 
 INCLUDE = "    include /etc/nginx/snippets/abrehamrahi.conf;"
+BACKUP_DIR = Path("/var/backups/abrehamrahi/nginx")
+
+
+def move_legacy_backups(path: Path) -> None:
+    """Move old backups out of directories loaded by nginx.conf."""
+    legacy_backups = sorted(path.parent.glob(path.name + ".bak-*"))
+    if not legacy_backups:
+        return
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    for backup in legacy_backups:
+        destination = BACKUP_DIR / f"{path.parent.name}-{backup.name}"
+        if destination.exists():
+            destination = BACKUP_DIR / f"{destination.name}-{int(time.time())}"
+        shutil.move(str(backup), destination)
+        print(f"Moved legacy Nginx backup out of the active config directory: {destination}")
 
 
 def main() -> int:
@@ -15,6 +30,7 @@ def main() -> int:
         print("usage: inject_nginx.py /path/to/srun.ir.conf", file=sys.stderr)
         return 2
     path = Path(sys.argv[1])
+    move_legacy_backups(path)
     text = path.read_text(encoding="utf-8")
     if "include /etc/nginx/snippets/abrehamrahi.conf;" in text:
         print(f"Nginx include already exists in {path}")
@@ -50,7 +66,8 @@ def main() -> int:
     if closing is None:
         print("closing brace of server block not found", file=sys.stderr)
         return 1
-    backup = path.with_name(path.name + f".bak-{int(time.time())}")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup = BACKUP_DIR / f"{path.parent.name}-{path.name}.bak-{int(time.time())}"
     shutil.copy2(path, backup)
     lines.insert(closing, INCLUDE + "\n")
     path.write_text("".join(lines), encoding="utf-8")
