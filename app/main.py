@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .config import get_settings, validate_settings
 from .db import Database
-from .routers import admin, auth, cdn, files
+from .routers import admin, auth, cdn, files, testpage
 from .security import Crypto, origin_domain
 from .upstream import UpstreamClient, UpstreamError
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="درگاه API ابرهمراهی",
     description="درگاه بک‌اند برای ورود، فایل، پوشه، بارگذاری و لینک پایدار دامنه‌محور",
-    version="1.0.0",
+    version="1.1.0",
     root_path=settings.root_path,
     lifespan=lifespan,
 )
@@ -88,3 +88,4 @@ app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(cdn.router)
+app.include_router(testpage.router)
