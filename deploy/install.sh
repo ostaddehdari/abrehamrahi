@@ -12,12 +12,31 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-if ! apt-get update; then
-  echo "WARNING: apt-get update reported an error, usually from an unrelated third-party repository." >&2
-  echo "Continuing with the successfully refreshed Ubuntu package indexes." >&2
+NEED_PACKAGES=0
+for required_command in python3 git nginx openssl curl; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    NEED_PACKAGES=1
+  fi
+done
+
+if [[ "$NEED_PACKAGES" -eq 0 ]]; then
+  VENV_CHECK_DIR="$(mktemp -d /tmp/abrehamrahi-venv-check.XXXXXX)"
+  if ! python3 -m venv "$VENV_CHECK_DIR" >/dev/null 2>&1; then
+    NEED_PACKAGES=1
+  fi
+  rm -rf -- "$VENV_CHECK_DIR"
 fi
-DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 install -y \
-  python3 python3-venv python3-pip git nginx openssl ca-certificates
+
+if [[ "$NEED_PACKAGES" -eq 1 ]]; then
+  if ! apt-get update; then
+    echo "WARNING: apt-get update reported an error, usually from an unrelated third-party repository." >&2
+    echo "Continuing with the successfully refreshed Ubuntu package indexes." >&2
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 install -y \
+    python3 python3-venv python3-pip git nginx openssl curl ca-certificates
+else
+  echo "Required system packages and Python venv are already available; skipping apt."
+fi
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
