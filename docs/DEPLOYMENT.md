@@ -8,7 +8,7 @@ git clone https://github.com/ostaddehdari/abrehamrahi.git /opt/abrehamrahi
 bash /opt/abrehamrahi/deploy/install.sh
 ```
 
-اسکریپت بسته‌های لازم را نصب، virtualenv را ایجاد، فایل محیطی را تولید، سرویس systemd را فعال و location مربوط به `/abrehamrahi` را داخل server block دامنهٔ `srun.ir` اضافه می‌کند. قبل از ویرایش Nginx یک فایل پشتیبان کنار فایل اصلی می‌سازد و قبل از reload دستور `nginx -t` اجرا می‌شود.
+اسکریپت بسته‌های لازم را نصب، virtualenv را ایجاد، فایل محیطی را تولید، سرویس systemd را فعال و location مربوط به `/abrehamrahi` را داخل server block دامنهٔ `srun.ir` اضافه می‌کند. قبل از ویرایش Nginx یک فایل پشتیبان در `/var/backups/abrehamrahi/nginx` می‌سازد و قبل از reload دستور `nginx -t` اجرا می‌شود. فایل پشتیبان عمداً بیرون `sites-enabled` و `conf.d` نگهداری می‌شود تا Nginx آن را به‌عنوان پیکربندی فعال نخواند.
 
 اگر فایل تنظیمات دامنه خودکار پیدا نشد:
 
