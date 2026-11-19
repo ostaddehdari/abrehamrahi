@@ -38,7 +38,8 @@ bash /opt/abrehamrahi/deploy/update.sh
 systemctl status abrehamrahi-api --no-pager
 journalctl -u abrehamrahi-api -n 100 --no-pager
 nginx -t
-curl -i http://127.0.0.1:18765/health
+APP_PORT="$(sed -n 's/^APP_PORT=//p' /etc/abrehamrahi.env | tail -n 1)"
+curl -i "http://127.0.0.1:$APP_PORT/health"
 curl -i https://srun.ir/abrehamrahi/health
 ```
 
