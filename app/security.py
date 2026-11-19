@@ -39,6 +39,26 @@ def create_random_token(prefix: str = "") -> str:
     return prefix + secrets.token_urlsafe(32)
 
 
+def create_testpage_cookie(secret: str, ttl_seconds: int = 28800) -> str:
+    payload = f"{int(time.time()) + ttl_seconds}.{secrets.token_urlsafe(18)}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def verify_testpage_cookie(secret: str, value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        expires, nonce, signature = value.split(".", 2)
+        if int(expires) < int(time.time()) or not nonce:
+            return False
+    except (TypeError, ValueError):
+        return False
+    payload = f"{expires}.{nonce}"
+    expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
 def hash_password(password: str) -> str:
     return PASSWORD_HASHER.hash(password)
 
