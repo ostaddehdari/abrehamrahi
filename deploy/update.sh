@@ -6,5 +6,6 @@ git -C /opt/abrehamrahi pull --ff-only origin main
 systemctl restart abrehamrahi-api
 nginx -t
 systemctl reload nginx
-curl --fail --silent http://127.0.0.1:18765/health
+APP_PORT="$(sed -n 's/^APP_PORT=//p' /etc/abrehamrahi.env | tail -n 1)"
+curl --fail --silent "http://127.0.0.1:$APP_PORT/health"
 
