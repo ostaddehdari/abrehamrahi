@@ -12,7 +12,10 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-apt-get update
+if ! apt-get update; then
+  echo "WARNING: apt-get update reported an error, usually from an unrelated third-party repository." >&2
+  echo "Continuing with the successfully refreshed Ubuntu package indexes." >&2
+fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git nginx openssl ca-certificates
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
