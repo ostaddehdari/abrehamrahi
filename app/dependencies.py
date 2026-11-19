@@ -7,8 +7,15 @@ from typing import Any
 from fastapi import Depends, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .config import Settings, get_settings
 from .db import Database
-from .security import Crypto, hash_secret, origin_domain, verify_prehashed_request_signature
+from .security import (
+    Crypto,
+    hash_secret,
+    origin_domain,
+    verify_prehashed_request_signature,
+    verify_testpage_cookie,
+)
 from .upstream import UpstreamClient, UpstreamError
 
 bearer = HTTPBearer(auto_error=False)
@@ -35,6 +42,7 @@ async def require_api_client(
     x_abr_content_sha256: str | None = Header(default=None),
     db: Database = Depends(get_db),
     crypto: Crypto = Depends(get_crypto),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     if not x_abr_client_token:
         raise HTTPException(401, "X-ABR-Client-Token لازم است")
@@ -49,6 +57,10 @@ async def require_api_client(
     if origin:
         if origin != client["domain"]:
             raise HTTPException(403, "این توکن به دامنه دیگری تعلق دارد")
+    elif verify_testpage_cookie(
+        settings.admin_password, request.cookies.get("abr_testpage_admin")
+    ):
+        pass
     else:
         if x_abr_domain != client["domain"]:
             raise HTTPException(403, "دامنه درخواست با توکن مطابقت ندارد")
