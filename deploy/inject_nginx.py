@@ -25,6 +25,23 @@ def move_legacy_backups(path: Path) -> None:
         print(f"Moved legacy Nginx backup out of the active config directory: {destination}")
 
 
+def find_server_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    blocks: list[tuple[int, int]] = []
+    depth = 0
+    server_start: int | None = None
+    server_base_depth = 0
+    for index, line in enumerate(lines):
+        clean = line.split("#", 1)[0]
+        if server_start is None and re.search(r"\bserver\s*\{", clean):
+            server_start = index
+            server_base_depth = depth
+        depth += clean.count("{") - clean.count("}")
+        if server_start is not None and depth == server_base_depth:
+            blocks.append((server_start, index))
+            server_start = None
+    return blocks
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: inject_nginx.py /path/to/srun.ir.conf", file=sys.stderr)
@@ -32,46 +49,35 @@ def main() -> int:
     path = Path(sys.argv[1])
     move_legacy_backups(path)
     text = path.read_text(encoding="utf-8")
-    if "include /etc/nginx/snippets/abrehamrahi.conf;" in text:
-        print(f"Nginx include already exists in {path}")
-        return 0
     lines = text.splitlines(keepends=True)
-    server_start = None
-    domain_line = None
-    depth = 0
-    depths: list[int] = []
-    for index, line in enumerate(lines):
-        clean = line.split("#", 1)[0]
-        depths.append(depth)
-        if re.search(r"\bserver\s*\{", clean) and server_start is None:
-            server_start = index
-        if server_start is not None and re.search(r"\bserver_name\b[^;]*\bsrun\.ir\b", clean):
-            domain_line = index
-            break
-        depth += clean.count("{") - clean.count("}")
-        if server_start is not None and depth == 0:
-            server_start = None
-    if domain_line is None or server_start is None:
+    matching_blocks: list[tuple[int, int]] = []
+    for start, end in find_server_blocks(lines):
+        block = "".join(lines[start : end + 1])
+        if re.search(r"\bserver_name\b[^;]*\bsrun\.ir\b", block):
+            matching_blocks.append((start, end))
+    if not matching_blocks:
         print(f"server block for srun.ir not found in {path}", file=sys.stderr)
         return 1
 
-    depth = 0
-    closing = None
-    for index in range(server_start, len(lines)):
-        clean = lines[index].split("#", 1)[0]
-        depth += clean.count("{") - clean.count("}")
-        if depth == 0 and index > server_start:
-            closing = index
-            break
-    if closing is None:
-        print("closing brace of server block not found", file=sys.stderr)
-        return 1
+    missing_include: list[tuple[int, int]] = []
+    for start, end in matching_blocks:
+        block = "".join(lines[start : end + 1])
+        if "include /etc/nginx/snippets/abrehamrahi.conf;" not in block:
+            missing_include.append((start, end))
+    if not missing_include:
+        print(f"Nginx include already exists in all srun.ir server blocks in {path}")
+        return 0
+
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backup = BACKUP_DIR / f"{path.parent.name}-{path.name}.bak-{int(time.time())}"
     shutil.copy2(path, backup)
-    lines.insert(closing, INCLUDE + "\n")
+    for _start, closing in reversed(missing_include):
+        lines.insert(closing, INCLUDE + "\n")
     path.write_text("".join(lines), encoding="utf-8")
-    print(f"Updated {path}; backup: {backup}")
+    print(
+        f"Updated {len(missing_include)} srun.ir server block(s) in {path}; "
+        f"backup: {backup}"
+    )
     return 0
 
 
