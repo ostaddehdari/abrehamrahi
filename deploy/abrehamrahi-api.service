@@ -9,7 +9,7 @@ User=abrehamrahi
 Group=abrehamrahi
 WorkingDirectory=/opt/abrehamrahi
 EnvironmentFile=/etc/abrehamrahi.env
-ExecStart=/opt/abrehamrahi/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765 --workers 2 --proxy-headers --forwarded-allow-ips=127.0.0.1
+ExecStart=/opt/abrehamrahi/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${APP_PORT} --workers 2 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
