@@ -61,7 +61,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "ABR_API_ORIGIN=https://abrehamrahi.ir"
     echo "APP_ROOT_PATH=/abrehamrahi"
     echo "PUBLIC_BASE_URL=https://srun.ir/abrehamrahi"
-    echo "APP_PORT=18765"
+    echo "APP_PORT=28765"
     echo "DATABASE_PATH=$DATA_DIR/abrehamrahi.sqlite3"
     echo "ENCRYPTION_KEY=$ENCRYPTION_KEY"
     echo "ADMIN_USERNAME=admin"
@@ -77,9 +77,54 @@ if [[ ! -f "$ENV_FILE" ]]; then
   chmod 600 "$ENV_FILE"
 fi
 
+systemctl stop abrehamrahi-api 2>/dev/null || true
+
+APP_PORT="$(sed -n 's/^APP_PORT=//p' "$ENV_FILE" | tail -n 1)"
+if [[ ! "$APP_PORT" =~ ^[0-9]+$ ]] || (( APP_PORT < 1 || APP_PORT > 65535 )); then
+  APP_PORT=28765
+fi
+
+port_is_available() {
+  python3 - "$1" <<'PY'
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    try:
+        sock.bind(("127.0.0.1", int(sys.argv[1])))
+    except OSError:
+        raise SystemExit(1)
+PY
+}
+
+if ! port_is_available "$APP_PORT"; then
+  PREVIOUS_PORT="$APP_PORT"
+  APP_PORT=""
+  for candidate in {28765..28775} 38765 48765; do
+    if port_is_available "$candidate"; then
+      APP_PORT="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$APP_PORT" ]]; then
+    APP_PORT="$(python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)"
+  fi
+  sed -i -E "s/^APP_PORT=.*/APP_PORT=$APP_PORT/" "$ENV_FILE"
+  echo "Port $PREVIOUS_PORT is used by another service; selected free port $APP_PORT."
+fi
+
 install -m 644 "$APP_DIR/deploy/abrehamrahi-api.service" /etc/systemd/system/abrehamrahi-api.service
 install -d -m 755 /etc/nginx/snippets
-install -m 644 "$APP_DIR/deploy/nginx-location.conf" /etc/nginx/snippets/abrehamrahi.conf
+sed "s/__APP_PORT__/$APP_PORT/g" "$APP_DIR/deploy/nginx-location.conf" \
+  > /etc/nginx/snippets/abrehamrahi.conf
+chmod 644 /etc/nginx/snippets/abrehamrahi.conf
 
 NGINX_SITE_CONFIG="${NGINX_SITE_CONFIG:-}"
 if [[ -z "$NGINX_SITE_CONFIG" ]]; then
@@ -101,7 +146,7 @@ systemctl enable --now abrehamrahi-api
 nginx -t
 systemctl reload nginx
 sleep 2
-curl --fail --silent http://127.0.0.1:18765/health >/dev/null
+curl --fail --silent "http://127.0.0.1:$APP_PORT/health" >/dev/null
 
 echo "Deployment completed."
 echo "API docs: https://srun.ir/abrehamrahi/docs"
