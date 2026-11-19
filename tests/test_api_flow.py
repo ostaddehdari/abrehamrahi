@@ -26,6 +26,12 @@ class FakeUpstream:
             return {"download_url": "https://storage.invalid/download"}
         if path.endswith("list-objects/"):
             return {"count": 1, "results": [{"id": "object-42", "name": "demo.txt"}]}
+        if path.endswith("get-quota/"):
+            return {"total_space": 1000, "used_space": 250}
+        if path.endswith("trash-objects/"):
+            return {"status": "trashed"}
+        if "delete-object" in path and method == "DELETE":
+            return None
         raise AssertionError(f"unexpected upstream call: {method} {path}")
 
     async def login(self, phone, *, password=None, code=None):
@@ -82,6 +88,15 @@ def test_sms_password_list_and_upload(monkeypatch):
         listed = client.get("/v1/files", headers=auth_headers)
         assert listed.status_code == 200, listed.text
         assert listed.json()["results"][0]["name"] == "demo.txt"
+        assert listed.json()["results"][0]["cdn_url"].startswith(
+            "https://srun.ir/abrehamrahi/cdn/"
+        )
+
+        quota = client.get("/v1/quota", headers=auth_headers)
+        assert quota.status_code == 200, quota.text
+        assert quota.json()["total"] == 1000
+        assert quota.json()["used"] == 250
+        assert quota.json()["remaining"] == 750
 
         monkeypatch.setattr("app.routers.files.httpx.AsyncClient", FakeSignedStorage)
         uploaded = client.post(
@@ -93,4 +108,17 @@ def test_sms_password_list_and_upload(monkeypatch):
         assert uploaded.status_code == 200, uploaded.text
         assert uploaded.json()["object_id"] == "object-42"
         assert uploaded.json()["cdn_url"].startswith("https://srun.ir/abrehamrahi/cdn/")
+
+        deleted = client.delete("/v1/files/object-42", headers=auth_headers)
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["permanent"] is False
+
+
+def test_testpage_is_admin_protected():
+    with TestClient(app) as client:
+        denied = client.get("/testpage")
+        assert denied.status_code == 401
+        page = client.get("/testpage", auth=("admin", "test-admin-password"))
+        assert page.status_code == 200
+        assert "آزمایشگاه API ابرهمراهی" in page.text
 
