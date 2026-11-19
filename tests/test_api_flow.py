@@ -98,6 +98,15 @@ def test_sms_password_list_and_upload(monkeypatch):
         assert quota.json()["used"] == 250
         assert quota.json()["remaining"] == 750
 
+        admin_page = client.get("/testpage", auth=("admin", "test-admin-password"))
+        assert admin_page.status_code == 200
+        same_origin_headers = {
+            "X-ABR-Client-Token": client_token,
+            "Authorization": f"Bearer {session}",
+        }
+        quota_without_origin = client.get("/v1/quota", headers=same_origin_headers)
+        assert quota_without_origin.status_code == 200, quota_without_origin.text
+
         monkeypatch.setattr("app.routers.files.httpx.AsyncClient", FakeSignedStorage)
         uploaded = client.post(
             "/v1/files/upload",
@@ -121,4 +130,6 @@ def test_testpage_is_admin_protected():
         page = client.get("/testpage", auth=("admin", "test-admin-password"))
         assert page.status_code == 200
         assert "آزمایشگاه API ابرهمراهی" in page.text
+        assert "abr_testpage_admin=" in page.headers["set-cookie"]
+        assert "HttpOnly" in page.headers["set-cookie"]
 
