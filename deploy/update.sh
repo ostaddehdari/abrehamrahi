@@ -6,5 +6,5 @@ git -C /opt/abrehamrahi pull --ff-only origin main
 systemctl restart abrehamrahi-api
 nginx -t
 systemctl reload nginx
-curl --fail --silent http://127.0.0.1:8765/health
+curl --fail --silent http://127.0.0.1:18765/health
 
