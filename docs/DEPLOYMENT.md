@@ -38,7 +38,7 @@ bash /opt/abrehamrahi/deploy/update.sh
 systemctl status abrehamrahi-api --no-pager
 journalctl -u abrehamrahi-api -n 100 --no-pager
 nginx -t
-curl -i http://127.0.0.1:8765/health
+curl -i http://127.0.0.1:18765/health
 curl -i https://srun.ir/abrehamrahi/health
 ```
 
