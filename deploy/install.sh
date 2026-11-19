@@ -42,6 +42,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "ABR_API_ORIGIN=https://abrehamrahi.ir"
     echo "APP_ROOT_PATH=/abrehamrahi"
     echo "PUBLIC_BASE_URL=https://srun.ir/abrehamrahi"
+    echo "APP_PORT=18765"
     echo "DATABASE_PATH=$DATA_DIR/abrehamrahi.sqlite3"
     echo "ENCRYPTION_KEY=$ENCRYPTION_KEY"
     echo "ADMIN_USERNAME=admin"
@@ -81,7 +82,7 @@ systemctl enable --now abrehamrahi-api
 nginx -t
 systemctl reload nginx
 sleep 2
-curl --fail --silent http://127.0.0.1:8765/health >/dev/null
+curl --fail --silent http://127.0.0.1:18765/health >/dev/null
 
 echo "Deployment completed."
 echo "API docs: https://srun.ir/abrehamrahi/docs"
