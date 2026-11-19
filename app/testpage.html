@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>آزمایشگاه API ابرهمراهی</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#152539;--muted:#64748b;--line:#dbe4ee;--paper:#fff;--canvas:#f3f7fb;
+      --brand:#075985;--brand-2:#0284c7;--soft:#e0f2fe;--ok:#087f5b;--warn:#b45309;--danger:#b42318;
+      --shadow:0 12px 30px rgba(15,43,69,.08);--radius:18px;
+    }
+    *{box-sizing:border-box} body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.7 Tahoma,"Segoe UI",sans-serif}
+    button,input{font:inherit} button{cursor:pointer} a{color:var(--brand)}
+    .topbar{background:linear-gradient(135deg,#082f49,#075985 58%,#0369a1);color:#fff;padding:26px max(20px,calc((100vw - 1440px)/2))}
+    .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:auto}
+    .brand h1{font-size:1.55rem;margin:0}.brand p{margin:4px 0 0;color:#d7efff}.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .top-actions a{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.35);padding:8px 13px;border-radius:10px}
+    .layout{max-width:1440px;margin:22px auto;padding:0 18px;display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;align-items:start}
+    .sidebar{position:sticky;top:16px;display:grid;gap:16px}.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+    h2,h3{margin:0 0 12px} h2{font-size:1.25rem} h3{font-size:1.05rem}.muted{color:var(--muted)}.small{font-size:.88rem}
+    label{display:block;font-weight:700;margin:11px 0 5px}.field{width:100%;border:1px solid #cbd5e1;border-radius:11px;padding:11px 12px;background:#fff;color:var(--ink)}
+    .field:focus{outline:3px solid #bae6fd;border-color:var(--brand-2)}.ltr{direction:ltr;text-align:left}
+    .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.row>*{min-width:0}.grow{flex:1}
+    .btn{border:0;border-radius:11px;padding:10px 15px;background:var(--brand);color:#fff;font-weight:700}.btn:hover{filter:brightness(1.08)}.btn:disabled{opacity:.55;cursor:not-allowed}
+    .btn.secondary{background:#e8f1f7;color:#17425f}.btn.ghost{background:transparent;color:var(--brand);border:1px solid #b8cfde}.btn.danger{background:#fee4e2;color:var(--danger)}.btn.small-btn{padding:7px 10px;font-size:.9rem}
+    .token-status{display:flex;align-items:center;gap:8px;margin-top:11px}.dot{width:9px;height:9px;border-radius:50%;background:#94a3b8}.dot.ok{background:#10b981}
+    .account-list{display:grid;gap:8px;margin-top:12px}.account{width:100%;text-align:right;border:1px solid var(--line);background:#fff;border-radius:13px;padding:11px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ink)}
+    .account.active{border-color:#38bdf8;background:#f0f9ff;box-shadow:0 0 0 2px #e0f2fe}.account-name{font-weight:800}.account-phone{direction:ltr;color:var(--muted);font-size:.9rem}.badge{font-size:.78rem;border-radius:999px;padding:3px 8px;background:#eef2f6;color:#526170;white-space:nowrap}.badge.ok{background:#d1fae5;color:#047857}
+    .main{display:grid;gap:18px}.notice{border:1px solid #f5cc86;background:#fff8e8;color:#74420b;border-radius:15px;padding:14px 16px}.notice.hidden,.hidden{display:none!important}
+    .auth-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.auth-panel{border:1px solid var(--line);border-radius:15px;padding:16px;background:#fbfdff}
+    .workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}.selected{background:var(--soft);color:#075985;padding:5px 11px;border-radius:999px;font-weight:700}
+    .quota{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}.metric{border:1px solid var(--line);background:#fbfdff;border-radius:14px;padding:14px}.metric span{display:block;color:var(--muted);font-size:.9rem}.metric strong{display:block;font-size:1.24rem;margin-top:2px;direction:ltr;text-align:right}.bar{height:9px;background:#e5edf4;border-radius:999px;overflow:hidden;margin-top:12px}.bar>i{display:block;height:100%;background:linear-gradient(90deg,#0ea5e9,#0369a1);width:0}
+    .tools{display:grid;grid-template-columns:1fr 1.2fr;gap:12px;margin-top:17px}.tool{border:1px solid var(--line);border-radius:14px;padding:14px}.tool h3{margin-bottom:6px}
+    .tree-wrap{margin-top:16px;border:1px solid var(--line);border-radius:15px;overflow:hidden}.tree-toolbar{padding:11px 13px;background:#f8fafc;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.tree{padding:10px;max-height:620px;overflow:auto;background:#fff}
+    .node{margin:3px 0}.node-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px}.node-row:hover{background:#f1f7fb}.node-row.folder{cursor:pointer}.node-row.selected-folder{background:#e0f2fe}.node-icon{width:27px;text-align:center}.node-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.node-meta{color:var(--muted);font-size:.82rem;white-space:nowrap}.node-actions{margin-right:auto;display:flex;gap:6px;flex-wrap:wrap}.children{margin-right:25px;border-right:1px dashed #bfd0dc;padding-right:9px}
+    .empty{padding:34px 18px;text-align:center;color:var(--muted)}.result{margin-top:13px;border:1px solid #a7f3d0;background:#ecfdf5;border-radius:13px;padding:13px}.result code{display:block;direction:ltr;word-break:break-all;margin:6px 0;color:#065f46}
+    .danger-zone{display:flex;align-items:center;gap:7px;color:var(--danger);font-size:.9rem}.spinner{width:18px;height:18px;border:2px solid #b7d4e5;border-top-color:var(--brand);border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:middle}@keyframes spin{to{transform:rotate(360deg)}}
+    .toast{position:fixed;left:18px;bottom:18px;max-width:min(430px,calc(100vw - 36px));background:#142b3d;color:#fff;border-radius:13px;padding:12px 16px;box-shadow:0 18px 45px #0f243444;z-index:20}.toast.error{background:#8f1d17}.toast.success{background:#086b4f}
+    details.raw{margin-top:10px}.raw pre{direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-all;background:#eef3f7;padding:10px;border-radius:10px;max-height:180px;overflow:auto}
+    @media(max-width:980px){.layout{grid-template-columns:1fr}.sidebar{position:static}.auth-grid,.tools{grid-template-columns:1fr}.quota{grid-template-columns:1fr}.topbar-inner{align-items:flex-start;flex-direction:column}.node-row{align-items:flex-start;flex-wrap:wrap}.node-actions{width:100%;margin-right:35px}}
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner">
+    <div class="brand"><h1>آزمایشگاه API ابرهمراهی</h1><p>مدیریت چند حساب، فایل‌ها، لینک پایدار و ظرفیت فضای ابری</p></div>
+    <nav class="top-actions"><a id="docsLink" href="#">مستندات API</a><a id="tokenLink" href="#">ساخت توکن سایت</a></nav>
+  </div></header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <h2>اتصال این صفحه</h2>
+        <p class="muted small">یک توکن فعال برای دامنه <b dir="ltr">srun.ir</b> وارد کنید. توکن فقط تا بسته‌شدن این تب نگهداری می‌شود.</p>
+        <label for="clientToken">توکن سایت</label>
+        <input id="clientToken" class="field ltr" type="password" autocomplete="off" placeholder="abrc_...">
+        <div class="row" style="margin-top:9px"><button id="saveToken" class="btn grow">ثبت توکن</button><button id="clearToken" class="btn ghost">پاک‌کردن</button></div>
+        <div class="token-status"><span id="tokenDot" class="dot"></span><span id="tokenText" class="muted small">توکن وارد نشده است</span></div>
+      </section>
+
+      <section class="card">
+        <div class="row"><h2 class="grow">حساب‌ها</h2><button id="newAccount" class="btn secondary small-btn">حساب جدید</button></div>
+        <div id="accountList" class="account-list"></div>
+        <p id="noAccounts" class="muted small">هنوز حسابی اضافه نشده است.</p>
+      </section>
+    </aside>
+
+    <main class="main">
+      <div id="tokenNotice" class="notice">برای شروع، ابتدا توکن سایت مخصوص دامنه <b dir="ltr">srun.ir</b> را در ستون کناری وارد کنید.</div>
+
+      <section class="card">
+        <div class="workspace-head"><div><h2>ورود و فعال‌سازی حساب</h2><p id="activeAccountText" class="muted">حساب جدید یا یکی از حساب‌های کناری را انتخاب کنید.</p></div><span id="sessionBadge" class="badge">بدون نشست</span></div>
+        <div class="auth-grid">
+          <div class="auth-panel">
+            <h3>ورود نخست با پیامک</h3>
+            <label for="accountLabel">نام نمایشی حساب</label><input id="accountLabel" class="field" placeholder="مثلاً حساب فایل‌های سایت">
+            <label for="phone">شماره موبایل</label><input id="phone" class="field ltr" inputmode="tel" autocomplete="tel" placeholder="09123456789">
+            <label for="futurePassword">رمز ورود دفعات بعد</label><input id="futurePassword" class="field ltr" type="password" autocomplete="new-password" minlength="8" placeholder="حداقل ۸ نویسه">
+            <button id="sendOtp" class="btn" style="margin-top:12px">ارسال کد تأیید</button>
+            <div id="verifyBox" class="hidden">
+              <label for="otpCode">کد پیامک‌شده</label><input id="otpCode" class="field ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="کد تأیید">
+              <button id="verifyOtp" class="btn" style="margin-top:10px">تأیید و تنظیم خودکار رمز</button>
+            </div>
+          </div>
+          <div class="auth-panel">
+            <h3>ورود مجدد با رمز</h3>
+            <p class="muted small">حساب را از ستون کناری انتخاب و رمزی را که هنگام تأیید پیامک تعیین کرده‌اید وارد کنید.</p>
+            <label for="loginPassword">رمز حساب انتخاب‌شده</label><input id="loginPassword" class="field ltr" type="password" autocomplete="current-password">
+            <div class="row" style="margin-top:12px"><button id="passwordLogin" class="btn">ورود با رمز</button><button id="logout" class="btn ghost">خروج نشست</button><button id="removeAccount" class="btn danger">حذف از فهرست</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cloudWorkspace" class="card">
+        <div class="workspace-head"><div><h2>فضای ابری حساب</h2><p class="muted">فایل‌ها و پوشه‌ها به‌صورت درختی نمایش داده می‌شوند.</p></div><button id="refresh" class="btn secondary">بازخوانی همه اطلاعات</button></div>
+        <div class="quota">
+          <div class="metric"><span>کل فضا</span><strong id="quotaTotal">—</strong></div>
+          <div class="metric"><span>مصرف‌شده</span><strong id="quotaUsed">—</strong></div>
+          <div class="metric"><span>باقی‌مانده</span><strong id="quotaRemaining">—</strong></div>
+        </div>
+        <div class="bar" title="درصد مصرف"><i id="quotaBar"></i></div>
+        <details id="quotaRawBox" class="raw hidden"><summary>پاسخ خام ظرفیت</summary><pre id="quotaRaw"></pre></details>
+
+        <div class="tools">
+          <div class="tool"><h3>ایجاد پوشه</h3><p class="muted small">محل ایجاد: <b id="folderTargetName">ریشه</b></p><div class="row"><input id="folderName" class="field grow" placeholder="نام پوشه"><button id="createFolder" class="btn">ایجاد</button></div></div>
+          <div class="tool"><h3>بارگذاری فایل</h3><p class="muted small">مقصد: <b id="uploadTargetName">ریشه</b></p><div class="row"><input id="uploadFile" class="field grow" type="file"><button id="upload" class="btn">بارگذاری و ساخت لینک</button></div><div id="uploadResult" class="result hidden"></div></div>
+        </div>
+
+        <div class="tree-wrap">
+          <div class="tree-toolbar"><div><b>درخت فایل‌ها</b> <span id="itemCount" class="muted small"></span></div><div class="row"><button id="selectRoot" class="btn ghost small-btn">انتخاب ریشه</button><label class="danger-zone"><input id="permanentDelete" type="checkbox"> حذف دائمی</label></div></div>
+          <div id="tree" class="tree"><div class="empty">برای مشاهده فایل‌ها وارد یکی از حساب‌ها شوید.</div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    'use strict';
+    const base = location.pathname.replace(/\/testpage\/?$/, '');
+    const $ = id => document.getElementById(id);
+    $('docsLink').href = base + '/docs'; $('tokenLink').href = base + '/admin/tokens';
+    const PROFILE_KEY = 'abr_test_profiles_v1', TOKEN_KEY = 'abr_test_client_token_v1', SESSION_KEY = 'abr_test_sessions_v1';
+    let profiles = readStore(localStorage, PROFILE_KEY, []);
+    let sessions = readStore(sessionStorage, SESSION_KEY, {});
+    let clientToken = sessionStorage.getItem(TOKEN_KEY) || '';
+    let activePhone = profiles[0]?.phone || '';
+    let challengeId = '', pendingPassword = '', items = [], selectedFolder = '';
+
+    function readStore(store, key, fallback){ try{return JSON.parse(store.getItem(key)) || fallback}catch{return fallback} }
+    function saveProfiles(){ localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles)); }
+    function saveSessions(){ sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessions)); }
+    function esc(value){return String(value ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+    function toast(message, type=''){const t=$('toast');t.textContent=message;t.className='toast '+type;clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.add('hidden'),4500)}
+    function setBusy(button,busy,label){if(!button)return; if(busy){button.dataset.label=button.textContent;button.innerHTML='<span class="spinner"></span> '+label;button.disabled=true}else{button.textContent=button.dataset.label||label;button.disabled=false}}
+    function normalizePhone(v){let d=String(v).replace(/\D/g,'');if(d.startsWith('0098'))d=d.slice(4);else if(d.startsWith('98')&&d.length>10)d=d.slice(2);if(d.startsWith('0'))d=d.slice(1);return d}
+    function displayPhone(v){const p=normalizePhone(v);return p.length===10?'0'+p:v}
+    function activeProfile(){return profiles.find(p=>p.phone===activePhone)}
+    function activeSession(){return sessions[activePhone]||''}
+    function commonHeaders(auth=true){const h={'X-ABR-Client-Token':clientToken};if(auth&&activeSession())h.Authorization='Bearer '+activeSession();return h}
+    async function api(path, options={}){
+      if(!clientToken)throw new Error('ابتدا توکن سایت را وارد کنید.');
+      const headers={...commonHeaders(options.auth!==false),...(options.headers||{})};
+      const response=await fetch(base+path,{...options,headers});
+      const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
+      if(!response.ok){const detail=data?.detail;const upstream=data?.upstream_status?` (ابرهمراهی: ${data.upstream_status})`:'';throw new Error((typeof detail==='string'?detail:'درخواست ناموفق بود')+upstream)}
+      return data;
+    }
+
+    function updateTokenUI(){
+      $('clientToken').value=clientToken;$('tokenDot').classList.toggle('ok',!!clientToken);$('tokenText').textContent=clientToken?'توکن برای این تب فعال است':'توکن وارد نشده است';$('tokenNotice').classList.toggle('hidden',!!clientToken)
+    }
+    function renderAccounts(){
+      const box=$('accountList');box.innerHTML='';$('noAccounts').classList.toggle('hidden',profiles.length>0);
+      profiles.forEach(p=>{const b=document.createElement('button');b.className='account'+(p.phone===activePhone?' active':'');b.innerHTML=`<span><span class="account-name">${esc(p.label||'حساب ابرهمراهی')}</span><span class="account-phone">${esc(displayPhone(p.phone))}</span></span><span class="badge ${sessions[p.phone]?'ok':''}">${sessions[p.phone]?'متصل':'آفلاین'}</span>`;b.onclick=()=>selectAccount(p.phone);box.appendChild(b)});
+      const p=activeProfile();$('activeAccountText').textContent=p?`${p.label||'حساب'} — ${displayPhone(p.phone)}`:'حساب جدید یا یکی از حساب‌های کناری را انتخاب کنید.';$('sessionBadge').textContent=activeSession()?'نشست فعال':'بدون نشست';$('sessionBadge').className='badge '+(activeSession()?'ok':'');
+    }
+    function selectAccount(phone){activePhone=phone;selectedFolder='';const p=activeProfile();$('accountLabel').value=p?.label||'';$('phone').value=p?displayPhone(p.phone):'';$('futurePassword').value='';$('loginPassword').value='';challengeId='';$('verifyBox').classList.add('hidden');renderAccounts();updateTargets();if(activeSession())refreshAll();else clearWorkspace('برای مشاهده فایل‌ها، با پیامک یا رمز وارد این حساب شوید.')}
+    function saveProfile(phone,label,passwordConfigured=false){const normalized=normalizePhone(phone);let p=profiles.find(x=>x.phone===normalized);if(p){p.label=label||p.label;p.passwordConfigured=p.passwordConfigured||passwordConfigured}else{p={phone:normalized,label:label||('حساب '+displayPhone(normalized)),passwordConfigured};profiles.push(p)}saveProfiles();activePhone=normalized;renderAccounts();return p}
+
+    $('saveToken').onclick=()=>{const value=$('clientToken').value.trim();if(!value.startsWith('abrc_'))return toast('قالب توکن سایت درست نیست.','error');clientToken=value;sessionStorage.setItem(TOKEN_KEY,value);updateTokenUI();toast('توکن برای این تب ثبت شد.','success')};
+    $('clearToken').onclick=()=>{clientToken='';sessionStorage.removeItem(TOKEN_KEY);updateTokenUI();toast('توکن این تب پاک شد.')};
+    $('newAccount').onclick=()=>{activePhone='';selectedFolder='';challengeId='';['accountLabel','phone','futurePassword','loginPassword','otpCode'].forEach(id=>$(id).value='');$('verifyBox').classList.add('hidden');renderAccounts();clearWorkspace('پس از تأیید حساب، فایل‌ها اینجا نمایش داده می‌شوند.')};
+
+    $('sendOtp').onclick=async()=>{const button=$('sendOtp'),phone=normalizePhone($('phone').value),password=$('futurePassword').value,label=$('accountLabel').value.trim();if(phone.length!==10||!phone.startsWith('9'))return toast('شماره موبایل معتبر وارد کنید.','error');if(password.length<8)return toast('رمز باید حداقل ۸ نویسه باشد.','error');try{setBusy(button,true,'در حال ارسال');const data=await api('/v1/auth/sms/request',{method:'POST',auth:false,headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});challengeId=data.challenge_id;pendingPassword=password;saveProfile(phone,label);$('verifyBox').classList.remove('hidden');$('otpCode').focus();toast('کد تأیید ارسال شد.','success')}catch(e){toast(e.message,'error')}finally{setBusy(button,false,'ارسال کد تأیید')}};
+    $('verifyOtp').onclick=async()=>{const button=$('verifyOtp'),code=Number($('otpCode').value);if(!challengeId||!code)return toast('کد تأیید را وارد کنید.','error');try{setBusy(button,true,'در حال تأیید');const data=await api('/v1/auth/sms/verify',{method:'POST',auth:false,headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge_id:challengeId,code,new_password:pendingPassword})});sessions[activePhone]=data.session_token;saveSessions();saveProfile(activePhone,$('accountLabel').value.trim(),true);pendingPassword='';$('futurePassword').value='';$('otpCode').value='';$('verifyBox').classList.add('hidden');renderAccounts();toast('ورود انجام شد و رمز آینده تنظیم شد.','success');await refreshAll()}catch(e){toast(e.message,'error')}finally{setBusy(button,false,'تأیید و تنظیم خودکار رمز')}};
+    $('passwordLogin').onclick=async()=>{const p=activeProfile(),password=$('loginPassword').value;if(!p)return toast('ابتدا یک حساب را انتخاب کنید.','error');if(password.length<8)return toast('رمز حساب را وارد کنید.','error');const button=$('passwordLogin');try{setBusy(button,true,'در حال ورود');const data=await api('/v1/auth/login',{method:'POST',auth:false,headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:p.phone,password})});sessions[p.phone]=data.session_token;saveSessions();$('loginPassword').value='';renderAccounts();toast('ورود با رمز موفق بود.','success');await refreshAll()}catch(e){toast(e.message,'error')}finally{setBusy(button,false,'ورود با رمز')}};
+    $('logout').onclick=async()=>{if(!activePhone)return;try{if(activeSession())await api('/v1/auth/logout',{method:'POST'})}catch{}delete sessions[activePhone];saveSessions();renderAccounts();clearWorkspace('نشست این حساب بسته شد.');toast('از حساب خارج شدید.')};
+    $('removeAccount').onclick=()=>{const p=activeProfile();if(!p)return;if(!confirm(`حساب ${displayPhone(p.phone)} از فهرست این مرورگر حذف شود؟`))return;profiles=profiles.filter(x=>x.phone!==p.phone);delete sessions[p.phone];saveProfiles();saveSessions();activePhone=profiles[0]?.phone||'';renderAccounts();activePhone?selectAccount(activePhone):$('newAccount').click();toast('حساب از فهرست مرورگر حذف شد.')};
+
+    function itemId(x){return String(x?.id??x?.object_id??'')}
+    function itemName(x){return String(x?.name??x?.title??x?.filename??'بدون نام')}
+    function parentId(x){let p=x?.parent_id??x?.parent??x?.parent_uuid??'';if(p&&typeof p==='object')p=p.id??p.uuid??'';return p==null?'':String(p)}
+    function isFolder(x){for(const k of ['is_folder','is_dir','folder']){const v=x?.[k];if(typeof v==='boolean')return v;if(v===0||v===1||v==='0'||v==='1')return String(v)==='1'}if(x?.is_file===true)return false;const kind=['type','object_type','obj_type','kind','mime_type'].map(k=>String(x?.[k]??'').toLowerCase()).join(' ');return kind.includes('folder')||kind.includes('directory')||kind.trim()==='dir'}
+    function itemSize(x){const n=Number(x?.size??x?.obj_size??x?.file_size);return Number.isFinite(n)?n:null}
+    function formatBytes(n){n=Number(n);if(!Number.isFinite(n)||n<0)return '—';const units=['بایت','کیلوبایت','مگابایت','گیگابایت','ترابایت'];let i=0;while(n>=1024&&i<units.length-1){n/=1024;i++}return `${new Intl.NumberFormat('fa-IR',{maximumFractionDigits:i?2:0}).format(n)} ${units[i]}`}
+    function updateTargets(){const folder=items.find(x=>itemId(x)===selectedFolder);const name=folder?itemName(folder):'ریشه';$('folderTargetName').textContent=name;$('uploadTargetName').textContent=name}
+    function clearWorkspace(message){items=[];selectedFolder='';$('tree').innerHTML=`<div class="empty">${esc(message)}</div>`;$('itemCount').textContent='';['quotaTotal','quotaUsed','quotaRemaining'].forEach(id=>$(id).textContent='—');$('quotaBar').style.width='0';$('quotaRawBox').classList.add('hidden');updateTargets()}
+
+    async function loadFiles(){let all=[],offset=0,total=null;for(let page=0;page<100;page++){const data=await api(`/v1/files?recursive=true&limit=100&offset=${offset}`);const batch=Array.isArray(data)?data:(Array.isArray(data?.results)?data.results:[]);all.push(...batch);total=Number(data?.count??data?.total??NaN);offset+=batch.length;if(!batch.length||batch.length<100||(Number.isFinite(total)&&offset>=total))break}items=all;renderTree()}
+    async function loadQuota(){const q=await api('/v1/quota');$('quotaTotal').textContent=formatBytes(q.total);$('quotaUsed').textContent=formatBytes(q.used);$('quotaRemaining').textContent=formatBytes(q.remaining);const percent=q.total>0&&q.used>=0?Math.min(100,(q.used/q.total)*100):0;$('quotaBar').style.width=percent+'%';$('quotaRaw').textContent=JSON.stringify(q.raw,null,2);$('quotaRawBox').classList.toggle('hidden',q.total!=null||q.used!=null||q.remaining!=null)}
+    async function refreshAll(){if(!activeSession())return clearWorkspace('برای مشاهده فایل‌ها ابتدا وارد حساب شوید.');const b=$('refresh');try{setBusy(b,true,'در حال دریافت');const results=await Promise.allSettled([loadFiles(),loadQuota()]);const failed=results.filter(x=>x.status==='rejected');if(failed.length)throw failed[0].reason;toast('اطلاعات حساب به‌روز شد.','success')}catch(e){toast(e.message,'error')}finally{setBusy(b,false,'بازخوانی همه اطلاعات')}}
+    $('refresh').onclick=refreshAll;$('selectRoot').onclick=()=>{selectedFolder='';updateTargets();renderTree()};
+
+    function renderTree(){
+      const tree=$('tree');$('itemCount').textContent=`(${new Intl.NumberFormat('fa-IR').format(items.length)} مورد)`;if(!items.length){tree.innerHTML='<div class="empty">این حساب هنوز فایل یا پوشه‌ای ندارد.</div>';return}
+      const byParent=new Map(),ids=new Set(items.map(itemId));for(const x of items){let p=parentId(x);if(!ids.has(p))p='';if(!byParent.has(p))byParent.set(p,[]);byParent.get(p).push(x)}for(const arr of byParent.values())arr.sort((a,b)=>(Number(!isFolder(a))-Number(!isFolder(b)))||itemName(a).localeCompare(itemName(b),'fa'));
+      const seen=new Set();const draw=(parent,depth=0)=>{const list=byParent.get(parent)||[];return list.map(x=>{const id=itemId(x);if(!id||seen.has(id))return '';seen.add(id);const folder=isFolder(x),url=x.cdn_url||'';return `<div class="node"><div class="node-row ${folder?'folder':''} ${folder&&id===selectedFolder?'selected-folder':''}" data-id="${esc(id)}" data-folder="${folder?'1':'0'}"><span class="node-icon">${folder?'📁':'📄'}</span><span class="node-name" title="${esc(itemName(x))}">${esc(itemName(x))}</span><span class="node-meta">${folder?'پوشه':formatBytes(itemSize(x))}</span><span class="node-actions">${folder?'':`<button class="btn ghost small-btn" data-action="download" data-id="${esc(id)}">دانلود</button><button class="btn ghost small-btn" data-action="copy" data-id="${esc(id)}" data-url="${esc(url)}">کپی لینک</button>`}<button class="btn danger small-btn" data-action="delete" data-id="${esc(id)}" data-name="${esc(itemName(x))}">حذف</button></span></div>${folder?`<div class="children">${draw(id,depth+1)}</div>`:''}</div>`}).join('')};
+      let html=draw('');const leftovers=items.filter(x=>!seen.has(itemId(x)));if(leftovers.length){byParent.set('',leftovers);html+=draw('')}tree.innerHTML=html||'<div class="empty">ساختار فایل‌ها قابل نمایش نیست.</div>';
+      tree.querySelectorAll('.node-row.folder').forEach(row=>row.addEventListener('click',e=>{if(e.target.closest('button'))return;selectedFolder=row.dataset.id;updateTargets();renderTree()}));
+      tree.querySelectorAll('[data-action]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();const a=btn.dataset.action;if(a==='download')downloadFile(btn.dataset.id);if(a==='copy')copyLink(btn.dataset.id,btn.dataset.url);if(a==='delete')deleteObject(btn.dataset.id,btn.dataset.name)}));
+      updateTargets();
+    }
+    async function getFileUrl(id,known=''){if(known)return known;const x=items.find(v=>itemId(v)===id);if(x?.cdn_url)return x.cdn_url;const data=await api(`/v1/files/${encodeURIComponent(id)}/download-link`);return data.download_url}
+    async function downloadFile(id){try{const url=await getFileUrl(id);window.open(url,'_blank','noopener');}catch(e){toast(e.message,'error')}}
+    async function copyLink(id,known){try{const url=await getFileUrl(id,known);await navigator.clipboard.writeText(url);toast('لینک فایل کپی شد.','success')}catch(e){toast(e.message||'کپی لینک انجام نشد.','error')}}
+    async function deleteObject(id,name){const permanent=$('permanentDelete').checked;const text=permanent?`«${name}» برای همیشه حذف شود؟ این کار قابل بازگشت نیست.`:`«${name}» به زباله‌دان منتقل شود؟`;if(!confirm(text))return;try{await api(`/v1/files/${encodeURIComponent(id)}?permanent=${permanent}`,{method:'DELETE'});if(selectedFolder===id)selectedFolder='';toast(permanent?'فایل برای همیشه حذف شد.':'مورد به زباله‌دان منتقل شد.','success');await refreshAll()}catch(e){toast(e.message,'error')}}
+
+    $('createFolder').onclick=async()=>{const name=$('folderName').value.trim(),b=$('createFolder');if(!name)return toast('نام پوشه را وارد کنید.','error');try{setBusy(b,true,'در حال ایجاد');await api('/v1/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,parent:selectedFolder||null})});$('folderName').value='';toast('پوشه ایجاد شد.','success');await refreshAll()}catch(e){toast(e.message,'error')}finally{setBusy(b,false,'ایجاد')}};
+    $('upload').onclick=async()=>{const file=$('uploadFile').files[0],b=$('upload');if(!file)return toast('یک فایل انتخاب کنید.','error');const form=new FormData();form.append('file',file);form.append('parent',selectedFolder);form.append('force_overwrite','false');form.append('is_hidden','false');try{setBusy(b,true,'در حال بارگذاری');const data=await api('/v1/files/upload',{method:'POST',body:form});const url=data.cdn_url||data.download_url||'';$('uploadResult').classList.remove('hidden');$('uploadResult').innerHTML=`<b>بارگذاری کامل شد</b><code>${esc(url)}</code><div class="row"><button id="copyUploaded" class="btn secondary small-btn">کپی لینک</button><a class="btn ghost small-btn" href="${esc(url)}" target="_blank" rel="noopener">دانلود فایل</a></div>`;$('copyUploaded').onclick=async()=>{await navigator.clipboard.writeText(url);toast('لینک نهایی کپی شد.','success')};$('uploadFile').value='';toast('فایل ثبت شد و لینک پایدار ساخته شد.','success');await refreshAll()}catch(e){toast(e.message,'error')}finally{setBusy(b,false,'بارگذاری و ساخت لینک')}};
+
+    updateTokenUI();renderAccounts();if(activePhone)selectAccount(activePhone);else clearWorkspace('پس از افزودن حساب، فایل‌ها اینجا نمایش داده می‌شوند.');
+  })();
+  </script>
+</body>
+</html>
