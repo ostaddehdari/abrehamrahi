@@ -16,7 +16,8 @@ if ! apt-get update; then
   echo "WARNING: apt-get update reported an error, usually from an unrelated third-party repository." >&2
   echo "Continuing with the successfully refreshed Ubuntu package indexes." >&2
 fi
-DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git nginx openssl ca-certificates
+DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 install -y \
+  python3 python3-venv python3-pip git nginx openssl ca-certificates
 
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
