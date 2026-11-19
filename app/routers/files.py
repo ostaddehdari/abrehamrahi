@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 import uuid
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from ..config import Settings, get_settings
 from ..db import Database
@@ -44,6 +45,73 @@ def _signed_url(entry: Any) -> str | None:
         return entry
     if isinstance(entry, dict):
         return entry.get("url") or entry.get("signed_url") or entry.get("signedUrl")
+    return None
+
+
+def _is_folder(item: dict[str, Any]) -> bool:
+    for key in ("is_folder", "is_dir", "folder"):
+        value = item.get(key)
+        if isinstance(value, bool):
+            return value
+        if value in (0, 1, "0", "1"):
+            return str(value) == "1"
+    if item.get("is_file") is True:
+        return False
+    kind = " ".join(
+        str(item.get(key, "")).lower()
+        for key in ("type", "object_type", "obj_type", "kind", "mime_type")
+    )
+    return "folder" in kind or "directory" in kind or kind.strip() == "dir"
+
+
+def _integer(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        if not isinstance(value, str):
+            return None
+    match = re.fullmatch(
+        r"\s*([0-9]+(?:\.[0-9]+)?)\s*(b|byte|bytes|kb|kib|mb|mib|gb|gib|tb|tib)\s*",
+        value.lower().replace(",", ""),
+    )
+    if not match:
+        return None
+    factors = {
+        "b": 1,
+        "byte": 1,
+        "bytes": 1,
+        "kb": 1024,
+        "kib": 1024,
+        "mb": 1024**2,
+        "mib": 1024**2,
+        "gb": 1024**3,
+        "gib": 1024**3,
+        "tb": 1024**4,
+        "tib": 1024**4,
+    }
+    return int(float(match.group(1)) * factors[match.group(2)])
+
+
+def _find_quota_number(data: Any, names: tuple[str, ...]) -> int | None:
+    wanted = {name.lower().replace("-", "_") for name in names}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            normalized = str(key).lower().replace("-", "_")
+            if normalized in wanted:
+                parsed = _integer(value)
+                if parsed is not None:
+                    return parsed
+        for value in data.values():
+            found = _find_quota_number(value, names)
+            if found is not None:
+                return found
+    elif isinstance(data, list):
+        for value in data:
+            found = _find_quota_number(value, names)
+            if found is not None:
+                return found
     return None
 
 
@@ -106,9 +174,71 @@ async def list_files(
         assets = await db.fetchall("SELECT object_id,public_id FROM assets WHERE user_id=?", (user["id"],))
         cdn = {row["object_id"]: f"{settings.public_base_url}/cdn/{row['public_id']}" for row in assets}
         for item in result["results"]:
-            if isinstance(item, dict) and str(item.get("id")) in cdn:
-                item["cdn_url"] = cdn[str(item["id"])]
+            if not isinstance(item, dict) or item.get("id") is None or _is_folder(item):
+                continue
+            object_id = str(item["id"])
+            if object_id not in cdn:
+                registered = await _register_asset(
+                    db,
+                    settings,
+                    user["id"],
+                    object_id,
+                    str(item.get("name") or item.get("title") or "file"),
+                    str(item.get("parent") or item.get("parent_id") or "") or None,
+                    item.get("mime_type") or item.get("content_type"),
+                    _integer(item.get("size") or item.get("obj_size")),
+                )
+                cdn[object_id] = registered["cdn_url"]
+            item["cdn_url"] = cdn[object_id]
     return result
+
+
+@router.get("/quota")
+async def get_quota(
+    _client: dict = Depends(require_api_client),
+    user: dict = Depends(require_user),
+    db: Database = Depends(get_db),
+    crypto: Crypto = Depends(get_crypto),
+    upstream: UpstreamClient = Depends(get_upstream),
+):
+    result = await upstream_request_for_user(
+        user, db, crypto, upstream, "GET", "/api/v3/rgw/get-quota/"
+    )
+    total = _find_quota_number(
+        result,
+        (
+            "total",
+            "quota",
+            "total_space",
+            "quota_size",
+            "max_size",
+            "capacity",
+            "limit",
+            "storage_limit",
+            "hard_limit",
+        ),
+    )
+    used = _find_quota_number(
+        result,
+        (
+            "used",
+            "usage",
+            "used_space",
+            "usage_size",
+            "consumed",
+            "occupied",
+            "current_usage",
+            "storage_used",
+        ),
+    )
+    remaining = _find_quota_number(
+        result, ("remaining", "remaining_space", "free", "free_space", "available")
+    )
+    if remaining is None and total is not None and used is not None:
+        remaining = max(0, total - used)
+    if total is None and used is not None and remaining is not None:
+        total = used + remaining
+    return {"total": total, "used": used, "remaining": remaining, "raw": result}
 
 
 @router.post("/folders")
@@ -151,6 +281,41 @@ async def get_download_link(
     if not isinstance(result, dict) or not result.get("download_url"):
         raise HTTPException(502, "لینک دانلود در پاسخ ابرهمراهی موجود نیست")
     return {"object_id": object_id, "download_url": result["download_url"]}
+
+
+@router.delete("/files/{object_id}")
+async def delete_file(
+    object_id: str,
+    permanent: bool = Query(False),
+    _client: dict = Depends(require_api_client),
+    user: dict = Depends(require_user),
+    db: Database = Depends(get_db),
+    crypto: Crypto = Depends(get_crypto),
+    upstream: UpstreamClient = Depends(get_upstream),
+):
+    if permanent:
+        upstream_result = await upstream_request_for_user(
+            user,
+            db,
+            crypto,
+            upstream,
+            "DELETE",
+            "/api/v3/rgw/delete-object/" + quote(object_id, safe="") + "/",
+        )
+    else:
+        upstream_result = await upstream_request_for_user(
+            user,
+            db,
+            crypto,
+            upstream,
+            "POST",
+            "/api/v2/rgw/trash-objects/",
+            json={"obj_ids": [object_id]},
+        )
+    await db.execute(
+        "DELETE FROM assets WHERE user_id=? AND object_id=?", (user["id"], object_id)
+    )
+    return {"ok": True, "object_id": object_id, "permanent": permanent, "upstream": upstream_result}
 
 
 @router.post("/files/{object_id}/register-cdn")
