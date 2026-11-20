@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from urllib.parse import quote
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 
 from ..db import Database
-from ..dependencies import get_crypto, get_db, get_upstream, upstream_request_for_user
+from ..dependencies import get_crypto, get_db, get_upstream
+from ..downloads import resolve_download_url
 from ..security import Crypto
 from ..upstream import UpstreamClient
 
@@ -27,17 +26,10 @@ async def stable_download(
     )
     if not asset:
         raise HTTPException(404, "فایل پیدا نشد")
-    result = await upstream_request_for_user(
-        asset,
-        db,
-        crypto,
-        upstream,
-        "GET",
-        "/api/v1/flat/get-download-url/" + quote(asset["object_id"], safe="") + "/",
+    download_url = await resolve_download_url(
+        asset, asset["object_id"], db, crypto, upstream
     )
-    if not isinstance(result, dict) or not result.get("download_url"):
-        raise HTTPException(502, "لینک دانلود از ابرهمراهی دریافت نشد")
-    response = RedirectResponse(result["download_url"], status_code=302)
+    response = RedirectResponse(download_url, status_code=302)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Disposition"] = f'inline; filename="{asset["name"].replace(chr(34), "")}"'
     return response
