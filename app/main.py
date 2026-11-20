@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="درگاه API ابرهمراهی",
     description="درگاه بک‌اند برای ورود، فایل، پوشه، بارگذاری و لینک پایدار دامنه‌محور",
-    version="1.2.2",
+    version="1.2.3",
     root_path=settings.root_path,
     lifespan=lifespan,
 )
