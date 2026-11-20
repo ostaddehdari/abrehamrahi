@@ -122,14 +122,21 @@ async def save_upstream_tokens(db: Database, crypto: Crypto, phone: str, data: d
     if existing:
         await db.execute(
             """UPDATE users SET encrypted_access_token=?, encrypted_refresh_token=?,
-               upstream_token_id=?, updated_at=? WHERE id=?""",
-            (access, refresh or existing["encrypted_refresh_token"], token_id, now, existing["id"]),
+               upstream_token_id=?, last_login_at=?, updated_at=? WHERE id=?""",
+            (
+                access,
+                refresh or existing["encrypted_refresh_token"],
+                token_id,
+                now,
+                now,
+                existing["id"],
+            ),
         )
         return (await db.fetchone("SELECT * FROM users WHERE id=?", (existing["id"],))) or existing
     user_id = await db.execute(
         """INSERT INTO users(phone,encrypted_access_token,encrypted_refresh_token,
-           upstream_token_id,created_at,updated_at) VALUES(?,?,?,?,?,?)""",
-        (phone, access, refresh, token_id, now, now),
+           upstream_token_id,last_login_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)""",
+        (phone, access, refresh, token_id, now, now, now),
     )
     return (await db.fetchone("SELECT * FROM users WHERE id=?", (user_id,))) or {"id": user_id, "phone": phone}
 
