@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.security import hash_secret
+from app.upstream import UpstreamError
 
 
 class FakeUpstream:
@@ -56,6 +57,15 @@ class FakeSignedStorage:
     async def put(self, url, content, headers):
         self.counter += 1
         return httpx.Response(200, headers={"ETag": f'"etag-{self.counter}"'})
+
+
+class FakePasswordRejectUpstream(FakeUpstream):
+    async def request(self, method, path, **kwargs):
+        if path.endswith("change-password/"):
+            raise UpstreamError(
+                400, "ابرهمراهی درخواست را نپذیرفت", {"detail": "رمز ثبت نشد"}
+            )
+        return await super().request(method, path, **kwargs)
 
 
 def test_sms_password_list_and_upload(monkeypatch):
@@ -129,7 +139,72 @@ def test_testpage_is_admin_protected():
         assert denied.status_code == 401
         page = client.get("/testpage", auth=("admin", "test-admin-password"))
         assert page.status_code == 200
-        assert "آزمایشگاه API ابرهمراهی" in page.text
+        assert "کنسول ابری ابرهمراهی" in page.text
         assert "abr_testpage_admin=" in page.headers["set-cookie"]
         assert "HttpOnly" in page.headers["set-cookie"]
+        assert client.get("/testpage/assets/testpage.css").status_code == 200
+        assert client.get("/testpage/assets/testpage.js").status_code == 200
+
+
+def test_successful_otp_login_survives_password_sync_failure():
+    with TestClient(app) as client:
+        app.state.upstream = FakePasswordRejectUpstream()
+        client_token = "abrc_password-warning"
+        secret = app.state.crypto.encrypt("abrsig_password-warning")
+        import asyncio
+
+        asyncio.run(
+            app.state.db.execute(
+                "INSERT INTO api_clients(name,domain,token_hash,encrypted_signing_secret,active,created_at) VALUES(?,?,?,?,1,2)",
+                ("warning-test", "example.net", hash_secret(client_token), secret),
+            )
+        )
+        headers = {"Origin": "https://example.net", "X-ABR-Client-Token": client_token}
+        sent = client.post(
+            "/v1/auth/sms/request", json={"phone": "09351234567"}, headers=headers
+        )
+        challenge = sent.json()["challenge_id"]
+        verified = client.post(
+            "/v1/auth/sms/verify",
+            json={
+                "challenge_id": challenge,
+                "code": 12345,
+                "new_password": "future-password-123",
+                "display_name": "حساب آزمایشی",
+            },
+            headers=headers,
+        )
+        assert verified.status_code == 200, verified.text
+        assert verified.json()["session_token"].startswith("abrs_")
+        assert verified.json()["upstream_password_configured"] is False
+        assert verified.json()["password_warning"] == "رمز ثبت نشد"
+
+        session = verified.json()["session_token"]
+        me = client.get(
+            "/v1/auth/me",
+            headers={**headers, "Authorization": f"Bearer {session}"},
+        )
+        assert me.status_code == 200, me.text
+
+        admin_page = client.get("/testpage", auth=("admin", "test-admin-password"))
+        assert admin_page.status_code == 200
+        account_rows = client.get("/testpage/api/accounts")
+        assert account_rows.status_code == 200, account_rows.text
+        account = next(
+            row
+            for row in account_rows.json()["accounts"]
+            if row["phone"] == "9351234567"
+        )
+        assert account["display_name"] == "حساب آزمایشی"
+        assert account["password_sync_error"] == "رمز ثبت نشد"
+
+        renamed = client.patch(
+            f"/testpage/api/accounts/{account['id']}",
+            json={"display_name": "حساب ویرایش‌شده"},
+        )
+        assert renamed.status_code == 200
+        cleared = client.post(f"/testpage/api/accounts/{account['id']}/logout")
+        assert cleared.status_code == 200
+        deleted = client.delete(f"/testpage/api/accounts/{account['id']}")
+        assert deleted.status_code == 200
 
