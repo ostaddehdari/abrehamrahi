@@ -46,7 +46,14 @@
     else{button.textContent=button.dataset.label||label;button.disabled=false;}
   }
   function errorMessage(data, fallback='درخواست ناموفق بود') {
-    if(typeof data?.detail==='string')return data.detail;
+    if(typeof data?.detail==='string'){
+      const upstream=data?.upstream_detail;
+      if(upstream){
+        const extra=typeof upstream==='string'?upstream:JSON.stringify(upstream);
+        return `${data.detail}: ${extra}`;
+      }
+      return data.detail;
+    }
     if(typeof data?.message==='string')return data.message;
     return fallback;
   }
