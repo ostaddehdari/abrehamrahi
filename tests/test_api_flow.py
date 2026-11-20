@@ -11,8 +11,10 @@ from app.upstream import UpstreamError
 class FakeUpstream:
     def __init__(self):
         self.last_complete_payload = None
+        self.paths = []
 
     async def request(self, method, path, **kwargs):
+        self.paths.append((method, path))
         if path.endswith("generate-code/"):
             return {"status": "sent"}
         if path.endswith("change-password/"):
@@ -29,8 +31,14 @@ class FakeUpstream:
             return {"id": "object-42", "name": "demo.txt"}
         if path.endswith("abort-upload/"):
             return None
+        if "/api/v2/flat/get-object/" in path:
+            return {
+                "id": "object-42",
+                "name": "demo.txt",
+                "download_url": "https://storage.invalid/from-object",
+            }
         if "get-download-url" in path:
-            return {"download_url": "https://storage.invalid/download"}
+            raise UpstreamError(404, "not found", "legacy endpoint unavailable")
         if path.endswith("list-objects/"):
             return {"count": 1, "results": [{"id": "object-42", "name": "demo.txt"}]}
         if path.endswith("get-quota/"):
@@ -152,11 +160,26 @@ def test_sms_password_list_and_upload(monkeypatch):
         assert uploaded.status_code == 200, uploaded.text
         assert uploaded.json()["object_id"] == "object-42"
         assert uploaded.json()["cdn_url"].startswith("https://srun.ir/abrehamrahi/cdn/")
+        assert uploaded.json()["download_url"] is None
+        assert not any("get-download-url" in path for _, path in fake_upstream.paths)
         assert fake_upstream.last_complete_payload["parts"] == [
             {"ETag": "etag-1", "PartNumber": 1},
             {"ETag": "etag-2", "PartNumber": 2},
         ]
         assert "version_group" not in fake_upstream.last_complete_payload
+
+        direct = client.get(
+            "/v1/files/object-42/download-link", headers=auth_headers
+        )
+        assert direct.status_code == 200, direct.text
+        assert direct.json()["download_url"] == "https://storage.invalid/from-object"
+
+        cdn_path = uploaded.json()["cdn_url"].removeprefix(
+            "https://srun.ir/abrehamrahi"
+        )
+        cdn = client.get(cdn_path, follow_redirects=False)
+        assert cdn.status_code == 302, cdn.text
+        assert cdn.headers["location"] == "https://storage.invalid/from-object"
 
         rejected_upstream = FakeCompleteRejectUpstream()
         app.state.upstream = rejected_upstream
