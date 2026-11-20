@@ -7,9 +7,17 @@ from app.main import app
 from app.security import hash_secret
 from app.upstream import UpstreamError
 
+RealAsyncClient = httpx.AsyncClient
+
+
+class TestByteStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b"downloaded-file"
+
 
 class FakeUpstream:
     def __init__(self):
+        self.origin = "https://abrehamrahi.ir"
         self.last_complete_payload = None
         self.paths = []
 
@@ -71,6 +79,29 @@ class FakeSignedStorage:
     async def put(self, url, content, headers):
         self.counter += 1
         return httpx.Response(200, headers={"ETag": f'"etag-{self.counter}"'})
+
+
+class FakeDownloadStorage:
+    def __init__(self, **kwargs):
+        self.client = RealAsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    stream=TestByteStream(),
+                    headers={"Content-Type": "text/plain", "Content-Length": "15"},
+                )
+            ),
+            **kwargs,
+        )
+
+    def build_request(self, *args, **kwargs):
+        return self.client.build_request(*args, **kwargs)
+
+    async def send(self, *args, **kwargs):
+        return await self.client.send(*args, **kwargs)
+
+    async def aclose(self):
+        await self.client.aclose()
 
 
 class FakePasswordRejectUpstream(FakeUpstream):
@@ -177,9 +208,12 @@ def test_sms_password_list_and_upload(monkeypatch):
         cdn_path = uploaded.json()["cdn_url"].removeprefix(
             "https://srun.ir/abrehamrahi"
         )
-        cdn = client.get(cdn_path, follow_redirects=False)
-        assert cdn.status_code == 302, cdn.text
-        assert cdn.headers["location"] == "https://storage.invalid/from-object"
+        monkeypatch.setattr("app.routers.cdn.AsyncHTTPClient", FakeDownloadStorage)
+        cdn = client.get(cdn_path)
+        assert cdn.status_code == 200, cdn.text
+        assert cdn.content == b"downloaded-file"
+        assert cdn.headers["content-type"] == "text/plain"
+        assert cdn.headers["content-disposition"].startswith("attachment;")
 
         rejected_upstream = FakeCompleteRejectUpstream()
         app.state.upstream = rejected_upstream
