@@ -82,7 +82,11 @@ class Database:
     async def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.path) as conn:
+            await conn.execute("PRAGMA busy_timeout=30000")
             await conn.executescript(SCHEMA)
+            # Uvicorn starts both workers concurrently.  Serialize migrations
+            # so two workers cannot both attempt the same ALTER TABLE.
+            await conn.execute("BEGIN IMMEDIATE")
             columns = {
                 row[1] for row in await (await conn.execute("PRAGMA table_info(users)")).fetchall()
             }
