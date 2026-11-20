@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
 
@@ -78,11 +79,33 @@ async def _set_upstream_password(
     body: dict = {"new_password": new_password}
     if refresh:
         body["refresh"] = refresh
-    if code is not None:
-        body["code"] = code
+    try:
+        await upstream.request(
+            "POST", "/api/v2/profile/auth/change-password/", access_token=access, json=body
+        )
+        return
+    except UpstreamError as first_error:
+        if code is None or first_error.status_code not in (400, 401, 403):
+            raise
+    body["code"] = code
     await upstream.request(
         "POST", "/api/v2/profile/auth/change-password/", access_token=access, json=body
     )
+
+
+def _upstream_error_text(exc: UpstreamError) -> str:
+    detail = exc.detail
+    if isinstance(detail, dict):
+        for key in ("detail", "message", "error", "non_field_errors"):
+            value = detail.get(key)
+            if value:
+                detail = value
+                break
+    if isinstance(detail, (dict, list)):
+        text = json.dumps(detail, ensure_ascii=False)
+    else:
+        text = str(detail or exc.message)
+    return text[:500]
 
 
 @router.post("/sms/verify")
@@ -107,13 +130,35 @@ async def verify_sms(
 
     login = await upstream.login(challenge["phone"], code=payload.code)
     user = await save_upstream_tokens(db, crypto, challenge["phone"], login)
+    if payload.display_name:
+        await db.execute(
+            "UPDATE users SET display_name=?,updated_at=? WHERE id=?",
+            (payload.display_name.strip(), now, user["id"]),
+        )
+    password_warning = None
+    upstream_password_configured = bool(user.get("upstream_password_set"))
     if payload.new_password:
-        await _set_upstream_password(upstream, crypto, user, payload.new_password, payload.code)
         password_hash = hash_password(payload.new_password)
         await db.execute(
             "UPDATE users SET password_hash=?,updated_at=? WHERE id=?",
             (password_hash, now, user["id"]),
         )
+        try:
+            await _set_upstream_password(
+                upstream, crypto, user, payload.new_password, payload.code
+            )
+        except UpstreamError as exc:
+            password_warning = _upstream_error_text(exc)
+            await db.execute(
+                "UPDATE users SET upstream_password_set=0,password_sync_error=?,updated_at=? WHERE id=?",
+                (password_warning, now, user["id"]),
+            )
+        else:
+            upstream_password_configured = True
+            await db.execute(
+                "UPDATE users SET upstream_password_set=1,password_sync_error=NULL,updated_at=? WHERE id=?",
+                (now, user["id"]),
+            )
     await db.execute("UPDATE otp_challenges SET consumed_at=? WHERE id=?", (now, challenge["id"]))
     session_token = await create_session(db, user["id"], settings.session_ttl_seconds, request)
     return {
@@ -122,6 +167,8 @@ async def verify_sms(
         "expires_in": settings.session_ttl_seconds,
         "phone": "+98" + challenge["phone"],
         "password_configured": bool(payload.new_password or user.get("password_hash")),
+        "upstream_password_configured": upstream_password_configured,
+        "password_warning": password_warning,
         "is_registered": login.get("is_registered"),
     }
 
@@ -134,11 +181,19 @@ async def set_password(
     crypto: Crypto = Depends(get_crypto),
     upstream: UpstreamClient = Depends(get_upstream),
 ):
-    await _set_upstream_password(
-        upstream, crypto, user, payload.new_password, payload.verification_code
-    )
+    try:
+        await _set_upstream_password(
+            upstream, crypto, user, payload.new_password, payload.verification_code
+        )
+    except UpstreamError as exc:
+        await db.execute(
+            "UPDATE users SET upstream_password_set=0,password_sync_error=?,updated_at=? WHERE id=?",
+            (_upstream_error_text(exc), int(time.time()), user["id"]),
+        )
+        raise
     await db.execute(
-        "UPDATE users SET password_hash=?,updated_at=? WHERE id=?",
+        """UPDATE users SET password_hash=?,upstream_password_set=1,
+           password_sync_error=NULL,updated_at=? WHERE id=?""",
         (hash_password(payload.new_password), int(time.time()), user["id"]),
     )
     return {"ok": True}
