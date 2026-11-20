@@ -17,6 +17,28 @@ logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s 
 logger = logging.getLogger("abrehamrahi")
 
 
+def _public_upstream_detail(value, depth: int = 0):
+    if depth > 4:
+        return "[truncated]"
+    if isinstance(value, dict):
+        result = {}
+        for key, item in list(value.items())[:30]:
+            normalized = str(key).lower().replace("-", "_")
+            if any(
+                secret in normalized
+                for secret in ("password", "authorization", "cookie", "access_token", "refresh_token", "secret")
+            ):
+                result[str(key)] = "[REDACTED]"
+            else:
+                result[str(key)] = _public_upstream_detail(item, depth + 1)
+        return result
+    if isinstance(value, list):
+        return [_public_upstream_detail(item, depth + 1) for item in value[:30]]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value[:1000] if isinstance(value, str) else value
+    return str(value)[:1000]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_settings(settings)
@@ -31,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="درگاه API ابرهمراهی",
     description="درگاه بک‌اند برای ورود، فایل، پوشه، بارگذاری و لینک پایدار دامنه‌محور",
-    version="1.2.0",
+    version="1.2.1",
     root_path=settings.root_path,
     lifespan=lifespan,
 )
@@ -67,10 +89,21 @@ async def domain_cors(request: Request, call_next):
 
 @app.exception_handler(UpstreamError)
 async def upstream_error_handler(_request: Request, exc: UpstreamError):
-    logger.warning("Upstream request failed with status %s", exc.status_code)
+    detail = _public_upstream_detail(exc.detail)
+    logger.warning(
+        "Upstream request failed with status %s: %s detail=%r",
+        exc.status_code,
+        exc.message,
+        detail,
+    )
     outward = exc.status_code if 400 <= exc.status_code < 500 else 502
     return JSONResponse(
-        {"detail": exc.message, "upstream_status": exc.status_code}, status_code=outward
+        {
+            "detail": exc.message,
+            "upstream_status": exc.status_code,
+            "upstream_detail": detail,
+        },
+        status_code=outward,
     )
 
 
