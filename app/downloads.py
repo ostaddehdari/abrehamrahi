@@ -29,11 +29,7 @@ async def resolve_download_url(
     crypto: Crypto,
     upstream: UpstreamClient,
 ) -> str:
-    """Resolve a fresh download URL using the same object endpoint as the app.
-
-    Newer Abrehamrahi deployments expose ``download_url`` on the object detail
-    response. The older dedicated endpoint is retained only as a fallback.
-    """
+    """Resolve a download URL, preferring the endpoint that creates a fresh URL."""
     encoded_id = quote(object_id, safe="")
     first_error: UpstreamError | None = None
     try:
@@ -43,7 +39,7 @@ async def resolve_download_url(
             crypto,
             upstream,
             "GET",
-            f"/api/v2/flat/get-object/{encoded_id}/",
+            f"/api/v1/flat/get-download-url/{encoded_id}/",
         )
         found = _download_url(result)
         if found:
@@ -58,7 +54,7 @@ async def resolve_download_url(
             crypto,
             upstream,
             "GET",
-            f"/api/v1/flat/get-download-url/{encoded_id}/",
+            f"/api/v2/flat/get-object/{encoded_id}/",
         )
         found = _download_url(result)
         if found:
