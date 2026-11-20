@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from ..config import Settings, get_settings
 from ..db import Database
+from ..downloads import resolve_download_url
 from ..dependencies import (
     get_crypto,
     get_db,
@@ -283,17 +284,10 @@ async def get_download_link(
     crypto: Crypto = Depends(get_crypto),
     upstream: UpstreamClient = Depends(get_upstream),
 ):
-    result = await upstream_request_for_user(
-        user,
-        db,
-        crypto,
-        upstream,
-        "GET",
-        "/api/v1/flat/get-download-url/" + quote(object_id, safe="") + "/",
+    download_url = await resolve_download_url(
+        user, object_id, db, crypto, upstream
     )
-    if not isinstance(result, dict) or not result.get("download_url"):
-        raise HTTPException(502, "لینک دانلود در پاسخ ابرهمراهی موجود نیست")
-    return {"object_id": object_id, "download_url": result["download_url"]}
+    return {"object_id": object_id, "download_url": download_url}
 
 
 @router.delete("/files/{object_id}")
@@ -454,19 +448,13 @@ async def upload_file(
     registered = await _register_asset(
         db, settings, user["id"], object_id, filename, parent or None, file.content_type, size
     )
-    download = await upstream_request_for_user(
-        user,
-        db,
-        crypto,
-        upstream,
-        "GET",
-        "/api/v1/flat/get-download-url/" + quote(object_id, safe="") + "/",
-    )
     return {
         "object": completed,
         "object_id": object_id,
         "name": filename,
         "size": size,
-        "download_url": download.get("download_url") if isinstance(download, dict) else None,
+        # Completing the upload already returns the object. Do not turn a
+        # successful upload into an error by calling a second download API.
+        "download_url": completed.get("download_url") if isinstance(completed, dict) else None,
         **registered,
     }
