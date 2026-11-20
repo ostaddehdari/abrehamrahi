@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -81,27 +83,37 @@ class Database:
 
     async def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiosqlite.connect(self.path) as conn:
-            await conn.execute("PRAGMA busy_timeout=30000")
-            await conn.executescript(SCHEMA)
-            # Uvicorn starts both workers concurrently.  Serialize migrations
-            # so two workers cannot both attempt the same ALTER TABLE.
-            await conn.execute("BEGIN IMMEDIATE")
-            columns = {
-                row[1] for row in await (await conn.execute("PRAGMA table_info(users)")).fetchall()
-            }
-            migrations = {
-                "display_name": "ALTER TABLE users ADD COLUMN display_name TEXT",
-                "upstream_password_set": (
-                    "ALTER TABLE users ADD COLUMN upstream_password_set INTEGER NOT NULL DEFAULT 0"
-                ),
-                "password_sync_error": "ALTER TABLE users ADD COLUMN password_sync_error TEXT",
-                "last_login_at": "ALTER TABLE users ADD COLUMN last_login_at INTEGER",
-            }
-            for column, statement in migrations.items():
-                if column not in columns:
-                    await conn.execute(statement)
-            await conn.commit()
+        for attempt in range(10):
+            try:
+                async with aiosqlite.connect(self.path) as conn:
+                    await conn.execute("PRAGMA busy_timeout=30000")
+                    await conn.executescript(SCHEMA)
+                    # Uvicorn starts both workers concurrently. Serialize migrations
+                    # so two workers cannot both attempt the same ALTER TABLE.
+                    await conn.execute("BEGIN IMMEDIATE")
+                    columns = {
+                        row[1]
+                        for row in await (
+                            await conn.execute("PRAGMA table_info(users)")
+                        ).fetchall()
+                    }
+                    migrations = {
+                        "display_name": "ALTER TABLE users ADD COLUMN display_name TEXT",
+                        "upstream_password_set": (
+                            "ALTER TABLE users ADD COLUMN upstream_password_set INTEGER NOT NULL DEFAULT 0"
+                        ),
+                        "password_sync_error": "ALTER TABLE users ADD COLUMN password_sync_error TEXT",
+                        "last_login_at": "ALTER TABLE users ADD COLUMN last_login_at INTEGER",
+                    }
+                    for column, statement in migrations.items():
+                        if column not in columns:
+                            await conn.execute(statement)
+                    await conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 9:
+                    raise
+                await asyncio.sleep(0.1 * (attempt + 1))
 
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[aiosqlite.Connection]:
