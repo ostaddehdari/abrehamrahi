@@ -23,7 +23,7 @@ from ..dependencies import (
 )
 from ..models import FolderCreate, RegisterCdn
 from ..security import Crypto
-from ..upstream import UpstreamClient
+from ..upstream import UpstreamClient, UpstreamError
 
 router = APIRouter(prefix="/v1", tags=["فایل و پوشه"])
 
@@ -46,6 +46,19 @@ def _signed_url(entry: Any) -> str | None:
     if isinstance(entry, dict):
         return entry.get("url") or entry.get("signed_url") or entry.get("signedUrl")
     return None
+
+
+def _normalize_etag(value: str) -> str:
+    """Match the Android client before complete-upload.
+
+    S3-compatible storage usually returns ETag as a quoted header.  The
+    official client removes escaping and surrounding quotes before it builds
+    the `Parts(ETag, PartNumber)` payload expected by Abrehamrahi.
+    """
+    cleaned = value.strip().replace("\\", "")
+    if cleaned.startswith('W/"') and cleaned.endswith('"'):
+        cleaned = cleaned[3:-1]
+    return cleaned.strip('"')
 
 
 def _is_folder(item: dict[str, Any]) -> bool:
@@ -352,9 +365,22 @@ async def upload_file(
         raise HTTPException(400, "اندازه فایل صفر یا بیشتر از سقف مجاز است")
     filename = Path(file.filename or "file.bin").name
 
-    started = await upstream_request_for_user(
-        user, db, crypto, upstream, "POST", "/api/v2/flat/start-upload/", json={"obj_size": size}
-    )
+    try:
+        started = await upstream_request_for_user(
+            user,
+            db,
+            crypto,
+            upstream,
+            "POST",
+            "/api/v2/flat/start-upload/",
+            json={"obj_size": size},
+        )
+    except UpstreamError as exc:
+        raise UpstreamError(
+            exc.status_code,
+            "ابرهمراهی آغاز بارگذاری را نپذیرفت",
+            exc.detail,
+        ) from exc
     if not isinstance(started, dict):
         raise HTTPException(502, "پاسخ آغاز بارگذاری معتبر نیست")
     upload_id = started.get("upload_id")
@@ -380,26 +406,48 @@ async def upload_file(
             etag = response.headers.get("ETag")
             if not response.is_success or not etag:
                 raise HTTPException(502, f"ابر ذخیره‌سازی بخش {number} را تأیید نکرد")
-            parts.append({"ETag": etag, "PartNumber": number})
+            normalized_etag = _normalize_etag(etag)
+            if not normalized_etag:
+                raise HTTPException(502, f"ETag بخش {number} معتبر نیست")
+            parts.append({"ETag": normalized_etag, "PartNumber": number})
 
-    completed = await upstream_request_for_user(
-        user,
-        db,
-        crypto,
-        upstream,
-        "POST",
-        "/api/v2/flat/complete-upload/",
-        json={
-            "key": key,
-            "name": filename,
-            "parent": parent,
-            "upload_id": upload_id,
-            "parts": parts,
-            "force_overwrite": force_overwrite,
-            "version_group": None,
-            "is_hidden": is_hidden,
-        },
-    )
+    complete_payload = {
+        "key": key,
+        "name": filename,
+        "parent": parent,
+        "upload_id": upload_id,
+        "parts": parts,
+        "force_overwrite": force_overwrite,
+        "is_hidden": is_hidden,
+    }
+    try:
+        completed = await upstream_request_for_user(
+            user,
+            db,
+            crypto,
+            upstream,
+            "POST",
+            "/api/v2/flat/complete-upload/",
+            json=complete_payload,
+        )
+    except UpstreamError as exc:
+        try:
+            await upstream_request_for_user(
+                user,
+                db,
+                crypto,
+                upstream,
+                "POST",
+                "/api/v2/flat/abort-upload/",
+                json={"upload_id": upload_id, "key": key},
+            )
+        except UpstreamError:
+            pass
+        raise UpstreamError(
+            exc.status_code,
+            "ابرهمراهی تکمیل بارگذاری را نپذیرفت",
+            exc.detail,
+        ) from exc
     object_id = _object_id(completed)
     if not object_id:
         raise HTTPException(502, "شناسه فایل تکمیل‌شده در پاسخ موجود نیست")
