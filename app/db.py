@@ -14,10 +14,14 @@ PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     phone TEXT NOT NULL UNIQUE,
+    display_name TEXT,
     password_hash TEXT,
+    upstream_password_set INTEGER NOT NULL DEFAULT 0,
+    password_sync_error TEXT,
     encrypted_access_token TEXT,
     encrypted_refresh_token TEXT,
     upstream_token_id TEXT,
+    last_login_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -79,6 +83,20 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.path) as conn:
             await conn.executescript(SCHEMA)
+            columns = {
+                row[1] for row in await (await conn.execute("PRAGMA table_info(users)")).fetchall()
+            }
+            migrations = {
+                "display_name": "ALTER TABLE users ADD COLUMN display_name TEXT",
+                "upstream_password_set": (
+                    "ALTER TABLE users ADD COLUMN upstream_password_set INTEGER NOT NULL DEFAULT 0"
+                ),
+                "password_sync_error": "ALTER TABLE users ADD COLUMN password_sync_error TEXT",
+                "last_login_at": "ALTER TABLE users ADD COLUMN last_login_at INTEGER",
+            }
+            for column, statement in migrations.items():
+                if column not in columns:
+                    await conn.execute(statement)
             await conn.commit()
 
     @asynccontextmanager
