@@ -9,6 +9,9 @@ from app.upstream import UpstreamError
 
 
 class FakeUpstream:
+    def __init__(self):
+        self.last_complete_payload = None
+
     async def request(self, method, path, **kwargs):
         if path.endswith("generate-code/"):
             return {"status": "sent"}
@@ -22,7 +25,10 @@ class FakeUpstream:
                 "chunk_size": 3,
             }
         if path.endswith("complete-upload/"):
+            self.last_complete_payload = kwargs.get("json")
             return {"id": "object-42", "name": "demo.txt"}
+        if path.endswith("abort-upload/"):
+            return None
         if "get-download-url" in path:
             return {"download_url": "https://storage.invalid/download"}
         if path.endswith("list-objects/"):
@@ -68,9 +74,28 @@ class FakePasswordRejectUpstream(FakeUpstream):
         return await super().request(method, path, **kwargs)
 
 
+class FakeCompleteRejectUpstream(FakeUpstream):
+    def __init__(self):
+        super().__init__()
+        self.aborted = False
+
+    async def request(self, method, path, **kwargs):
+        if path.endswith("complete-upload/"):
+            raise UpstreamError(
+                400,
+                "ابرهمراهی درخواست را نپذیرفت",
+                {"parts": ["ETag نامعتبر است"]},
+            )
+        if path.endswith("abort-upload/"):
+            self.aborted = True
+            return None
+        return await super().request(method, path, **kwargs)
+
+
 def test_sms_password_list_and_upload(monkeypatch):
     with TestClient(app) as client:
-        app.state.upstream = FakeUpstream()
+        fake_upstream = FakeUpstream()
+        app.state.upstream = fake_upstream
         client_token = "abrc_test-token"
         secret = app.state.crypto.encrypt("abrsig_test-secret")
         import asyncio
@@ -127,6 +152,28 @@ def test_sms_password_list_and_upload(monkeypatch):
         assert uploaded.status_code == 200, uploaded.text
         assert uploaded.json()["object_id"] == "object-42"
         assert uploaded.json()["cdn_url"].startswith("https://srun.ir/abrehamrahi/cdn/")
+        assert fake_upstream.last_complete_payload["parts"] == [
+            {"ETag": "etag-1", "PartNumber": 1},
+            {"ETag": "etag-2", "PartNumber": 2},
+        ]
+        assert "version_group" not in fake_upstream.last_complete_payload
+
+        rejected_upstream = FakeCompleteRejectUpstream()
+        app.state.upstream = rejected_upstream
+        rejected = client.post(
+            "/v1/files/upload",
+            files={"file": ("rejected.txt", b"abcde", "text/plain")},
+            data={"parent": "root"},
+            headers=auth_headers,
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert rejected.json()["detail"] == "ابرهمراهی تکمیل بارگذاری را نپذیرفت"
+        assert rejected.json()["upstream_detail"] == {
+            "parts": ["ETag نامعتبر است"]
+        }
+        assert rejected_upstream.aborted is True
+
+        app.state.upstream = fake_upstream
 
         deleted = client.delete("/v1/files/object-42", headers=auth_headers)
         assert deleted.status_code == 200, deleted.text
